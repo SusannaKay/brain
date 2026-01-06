@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  brain-api:
+    build: ./brain_api
+    container_name: brain-api
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./brain_api/data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  telegram-bot:
+    build: ./telegram_bot
+    container_name: brain-telegram-bot
+    env_file: .env
+    depends_on:
+      - brain-api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
