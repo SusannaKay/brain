@@ -585,8 +585,21 @@ async def month(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(_format_month_report(filtered, year, month_number))
 
 
+async def _post_init(application: Application) -> None:
+    if DIGEST_ENABLED:
+        application.create_task(_digest_loop(application))
+    else:
+        logger.info("Daily digest disabled. Set DIGEST_ENABLED=true to activate.")
+
+    application.create_task(_mood_prompt_loop(application))
+    application.create_task(_mood_expiry_loop())
+    client = application.bot_data.get("brain_client")
+    if isinstance(client, brain_client.BrainClient):
+        application.create_task(brain_client.retry_loop(client))
+
+
 def main() -> None:
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(_post_init).build()
     client = brain_client.BrainClient(BRAIN_URL, BRAIN_TOKEN, BRAIN_BOT_DB_PATH)
     application.bot_data["brain_client"] = client
 
@@ -601,15 +614,6 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(mood_continue_callback, pattern="^mood_continue$"))
     application.add_handler(CallbackQueryHandler(mood_cancel_callback, pattern="^mood_cancel$"))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mood_message))
-
-    if DIGEST_ENABLED:
-        application.create_task(_digest_loop(application))
-    else:
-        logger.info("Daily digest disabled. Set DIGEST_ENABLED=true to activate.")
-
-    application.create_task(_mood_prompt_loop(application))
-    application.create_task(_mood_expiry_loop())
-    application.create_task(brain_client.retry_loop(client))
 
     application.run_polling()
 
