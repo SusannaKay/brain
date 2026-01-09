@@ -141,7 +141,7 @@ def continue_prompt(chat_id: int) -> Optional[FlowResponse]:
     if state.step == STEP_DID:
         return FlowResponse(text="Hai fatto qualcosa di rilevante? (opzionale)", reply_markup=_skip_keyboard())
     if state.step == STEP_WASTE:
-        return FlowResponse(text="C'è stata dispersione di tempo/energia? (Sì/No)", reply_markup=_waste_keyboard())
+        return FlowResponse(text="Hai fatto acquisti inutili? (Sì/No)", reply_markup=_waste_keyboard())
     return None
 
 
@@ -178,7 +178,7 @@ def handle_text(chat_id: int, text: str, now: datetime) -> Optional[FlowResponse
     if state.step == STEP_DID:
         state.did_thing = _normalize_optional_text(text)
         state.step = STEP_WASTE
-        return FlowResponse(text="C'è stata dispersione di tempo/energia? (Sì/No)", reply_markup=_waste_keyboard())
+        return FlowResponse(text="Hai fatto acquisti inutili? (Sì/No)", reply_markup=_waste_keyboard())
 
     if state.step == STEP_WASTE:
         waste_value = _parse_yes_no(text)

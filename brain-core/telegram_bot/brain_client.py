@@ -43,6 +43,7 @@ class BrainClient:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(f"{self.base_url}/mood/checkin", json=payload, headers=headers)
                 resp.raise_for_status()
+            logger.info("Mood check-in posted successfully.")
             return True
         except httpx.HTTPStatusError as exc:
             logger.error("Mood check-in failed: status=%s body=%s", exc.response.status_code, exc.response.text)
@@ -97,6 +98,7 @@ class BrainClient:
                 ),
             )
             conn.commit()
+        logger.info("Mood check-in queued in outbox; next_attempt_at=%s", next_attempt.isoformat())
 
     def _fetch_due(self, now: datetime) -> List[sqlite3.Row]:
         with sqlite3.connect(self.db_path) as conn:
