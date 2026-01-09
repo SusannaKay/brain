@@ -8,8 +8,11 @@ from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 import httpx
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+
+import brain_client
+import mood_flow
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("brain-telegram-bot")
@@ -22,6 +25,8 @@ RATE_LIMIT_SECONDS = float(os.getenv("BRAIN_BOT_RATE_LIMIT_SECONDS", "1.0"))
 DIGEST_ENABLED = os.getenv("DIGEST_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
 DIGEST_TIME_STR = os.getenv("DIGEST_TIME", "08:00")
 _digest_chat_ids_raw = os.getenv("DIGEST_CHAT_IDS", "")
+MOOD_TIME_STR = os.getenv("MOOD_TIME", "21:30")
+BRAIN_BOT_DB_PATH = os.getenv("BRAIN_BOT_DB_PATH", "/app/data/bot.db")
 try:
     DIGEST_TZ = ZoneInfo(os.getenv("TZ", "Europe/Rome"))
 except Exception:
@@ -62,6 +67,7 @@ def _parse_digest_time(raw: str) -> Optional[dt_time]:
 
 DIGEST_CHAT_IDS: List[int] = _parse_digest_chat_ids(_digest_chat_ids_raw)
 DIGEST_TIME: Optional[dt_time] = _parse_digest_time(DIGEST_TIME_STR)
+MOOD_TIME: Optional[dt_time] = _parse_digest_time(MOOD_TIME_STR)
 
 
 def _is_rate_limited(user_id: int) -> bool:
@@ -327,6 +333,157 @@ async def _digest_loop(application: Application) -> None:
             await asyncio.sleep(5)
 
 
+def _build_continue_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Continua", callback_data="mood_continue"),
+                InlineKeyboardButton("Annulla", callback_data="mood_cancel"),
+            ]
+        ]
+    )
+
+
+async def _send_mood_prompt(application: Application, chat_id: int, slot: str) -> None:
+    now = mood_flow.utcnow()
+    response = mood_flow.start_checkin(chat_id, slot=slot, now=now)
+    if not response:
+        return
+    try:
+        await application.bot.send_message(chat_id=chat_id, text=response.text, reply_markup=response.reply_markup)
+    except Exception:
+        logger.exception("Failed to send mood prompt to chat_id=%s", chat_id)
+
+
+async def _mood_prompt_loop(application: Application) -> None:
+    if not MOOD_TIME:
+        logger.info("Mood prompts disabled: invalid MOOD_TIME.")
+        return
+    if not DIGEST_CHAT_IDS:
+        logger.info("Mood prompts disabled: DIGEST_CHAT_IDS is empty.")
+        return
+    logger.info(
+        "Mood prompts enabled at %s Europe/Rome for chats=%s",
+        MOOD_TIME_STR,
+        ",".join(str(x) for x in DIGEST_CHAT_IDS),
+    )
+    while True:
+        now = datetime.now(DIGEST_TZ)
+        next_run = _next_digest_datetime(now, MOOD_TIME)
+        sleep_seconds = max(0, (next_run - now).total_seconds())
+        logger.info("Next mood prompt at %s (sleeping %.0fs)", next_run.isoformat(), sleep_seconds)
+        try:
+            await asyncio.sleep(sleep_seconds)
+            for chat_id in DIGEST_CHAT_IDS:
+                if mood_flow.is_idle(chat_id):
+                    await _send_mood_prompt(application, chat_id, slot="evening")
+        except asyncio.CancelledError:
+            logger.info("Mood prompt loop cancelled.")
+            raise
+        except Exception:
+            logger.exception("Unexpected error in mood prompt loop.")
+            await asyncio.sleep(5)
+
+
+async def _mood_expiry_loop() -> None:
+    while True:
+        try:
+            expired = mood_flow.expire_stale(mood_flow.utcnow())
+            if expired:
+                logger.info("Expired mood check-ins: %s", expired)
+        except Exception:
+            logger.exception("Unexpected error in mood expiry loop.")
+        await asyncio.sleep(15 * 60)
+
+
+def _get_brain_client(context: ContextTypes.DEFAULT_TYPE) -> Optional[brain_client.BrainClient]:
+    return context.application.bot_data.get("brain_client")
+
+
+async def mood_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await _guard_rate_limit(update):
+        return
+    _log_command("mood", update, context.args)
+    chat = update.effective_chat
+    if not chat or not update.message:
+        return
+    chat_id = chat.id
+    now = mood_flow.utcnow()
+    if mood_flow.expire_if_needed(chat_id, now):
+        pass
+    state = mood_flow.get_state(chat_id)
+    if state and mood_flow.is_open(state):
+        await update.message.reply_text(
+            "Check-in già in corso. Vuoi continuare o annullare?",
+            reply_markup=_build_continue_keyboard(),
+        )
+        return
+    response = mood_flow.start_checkin(chat_id, slot="manual", now=now)
+    if response:
+        await update.message.reply_text(response.text, reply_markup=response.reply_markup)
+
+
+async def skip_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await _guard_rate_limit(update):
+        return
+    _log_command("skip", update, context.args)
+    chat = update.effective_chat
+    if not chat or not update.message:
+        return
+    chat_id = chat.id
+    if mood_flow.cancel_checkin(chat_id):
+        await update.message.reply_text("Check-in annullato.", reply_markup=ReplyKeyboardRemove())
+    else:
+        await update.message.reply_text("Nessun check-in attivo.")
+
+
+async def mood_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    chat = update.effective_chat
+    if not chat:
+        return
+    chat_id = chat.id
+    now = mood_flow.utcnow()
+    if mood_flow.expire_if_needed(chat_id, now):
+        return
+    response = mood_flow.handle_text(chat_id, update.message.text, now)
+    if not response:
+        return
+    await update.message.reply_text(response.text, reply_markup=response.reply_markup)
+    if response.completed_payload:
+        client = _get_brain_client(context)
+        if client:
+            await client.post_mood_checkin(response.completed_payload)
+
+
+async def mood_continue_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.message:
+        return
+    await query.answer()
+    chat_id = query.message.chat_id
+    now = mood_flow.utcnow()
+    if mood_flow.expire_if_needed(chat_id, now):
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+    response = mood_flow.continue_prompt(chat_id)
+    if response:
+        await query.message.reply_text(response.text, reply_markup=response.reply_markup)
+    await query.edit_message_reply_markup(reply_markup=None)
+
+
+async def mood_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.message:
+        return
+    await query.answer()
+    chat_id = query.message.chat_id
+    if mood_flow.cancel_checkin(chat_id):
+        await query.message.reply_text("Check-in annullato.", reply_markup=ReplyKeyboardRemove())
+    await query.edit_message_reply_markup(reply_markup=None)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if await _guard_rate_limit(update):
         return
@@ -430,6 +587,8 @@ async def month(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    client = brain_client.BrainClient(BRAIN_URL, BRAIN_TOKEN, BRAIN_BOT_DB_PATH)
+    application.bot_data["brain_client"] = client
 
     application.add_handler(CommandHandler(["start", "help"], start))
     application.add_handler(CommandHandler("spesa", add_expense))
@@ -437,11 +596,20 @@ def main() -> None:
     application.add_handler(CommandHandler("chatid", chat_id))
     application.add_handler(CommandHandler("oggi", today))
     application.add_handler(CommandHandler("mese", month))
+    application.add_handler(CommandHandler("mood", mood_command))
+    application.add_handler(CommandHandler("skip", skip_command))
+    application.add_handler(CallbackQueryHandler(mood_continue_callback, pattern="^mood_continue$"))
+    application.add_handler(CallbackQueryHandler(mood_cancel_callback, pattern="^mood_cancel$"))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mood_message))
 
     if DIGEST_ENABLED:
         application.create_task(_digest_loop(application))
     else:
         logger.info("Daily digest disabled. Set DIGEST_ENABLED=true to activate.")
+
+    application.create_task(_mood_prompt_loop(application))
+    application.create_task(_mood_expiry_loop())
+    application.create_task(brain_client.retry_loop(client))
 
     application.run_polling()
 

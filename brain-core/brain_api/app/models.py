@@ -41,3 +41,14 @@ class EventIn(BaseModel):
     type: str
     payload_json: dict
     ts: Optional[datetime] = None
+
+
+class MoodCheckinIn(BaseModel):
+    ts: str
+    local_date: str
+    slot: str
+    energy_level: int = Field(..., ge=-2, le=2)
+    mood_score: int = Field(..., ge=-3, le=3)
+    mood_text: Optional[str] = None
+    did_thing: Optional[str] = None
+    waste_spend: bool

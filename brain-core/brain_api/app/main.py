@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 
 from .auth import verify_brain_token, verify_telegram_key
 from .db import get_connection, init_db
-from .models import BulkExpense, EventIn, ExpenseIn, ExpenseRecord, ExpenseSummary
+from .models import BulkExpense, EventIn, ExpenseIn, ExpenseRecord, ExpenseSummary, MoodCheckinIn
 from .settings import Settings, get_settings
 from zoneinfo import ZoneInfo
 
@@ -278,6 +278,51 @@ def finance_export(
         }
         for row in rows
     ]
+
+
+@app.post("/mood/checkin", dependencies=[Depends(verify_brain_token)])
+def mood_checkin(
+    checkin: MoodCheckinIn,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    ts_str = iso_utc(_parse_ts(checkin.ts))
+    local_date = normalize_text(checkin.local_date)
+    slot = normalize_text(checkin.slot)
+    if not local_date or not slot:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="local_date and slot are required")
+    mood_text = normalize_text(checkin.mood_text) or None
+    did_thing = normalize_text(checkin.did_thing) or None
+    created_at = iso_utc()
+    conn.execute(
+        """
+        INSERT INTO mood_checkins
+            (ts_utc, local_date, slot, energy_level, mood_score, mood_text, did_thing, waste_spend, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            ts_str,
+            local_date,
+            slot,
+            checkin.energy_level,
+            checkin.mood_score,
+            mood_text,
+            did_thing,
+            1 if checkin.waste_spend else 0,
+            created_at,
+        ),
+    )
+    conn.commit()
+    return {
+        "ts": ts_str,
+        "local_date": local_date,
+        "slot": slot,
+        "energy_level": checkin.energy_level,
+        "mood_score": checkin.mood_score,
+        "mood_text": mood_text,
+        "did_thing": did_thing,
+        "waste_spend": checkin.waste_spend,
+        "created_at": created_at,
+    }
 
 
 @app.post("/ingest", dependencies=[Depends(verify_brain_token)])

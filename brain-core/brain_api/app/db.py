@@ -46,3 +46,19 @@ def init_db(db_path: str) -> None:
             );
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mood_checkins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts_utc TEXT NOT NULL,
+                local_date TEXT NOT NULL,
+                slot TEXT NOT NULL,
+                energy_level INTEGER NOT NULL,
+                mood_score INTEGER NOT NULL,
+                mood_text TEXT,
+                did_thing TEXT,
+                waste_spend INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
