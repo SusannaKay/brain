@@ -10,5 +10,7 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY bot.py /app/bot.py
+COPY brain_client.py /app/brain_client.py
+COPY mood_flow.py /app/mood_flow.py
 
 CMD ["python", "/app/bot.py"]
