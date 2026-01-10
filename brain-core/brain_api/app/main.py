@@ -1,6 +1,6 @@
 import logging
 import time as time_module
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, Iterable, List, Optional, Union
 
@@ -323,6 +323,76 @@ def mood_checkin(
         "waste_spend": checkin.waste_spend,
         "created_at": created_at,
     }
+
+
+def _mood_row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "ts_utc": row["ts_utc"],
+        "local_date": row["local_date"],
+        "slot": row["slot"],
+        "energy_level": row["energy_level"],
+        "mood_score": row["mood_score"],
+        "mood_text": row["mood_text"],
+        "did_thing": row["did_thing"],
+        "waste_spend": row["waste_spend"],
+        "created_at": row["created_at"],
+    }
+
+
+@app.get("/mood/last", dependencies=[Depends(verify_brain_token)])
+def mood_last(conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    row = conn.execute(
+        """
+        SELECT id, ts_utc, local_date, slot, energy_level, mood_score, mood_text, did_thing, waste_spend, created_at
+        FROM mood_checkins
+        ORDER BY ts_utc DESC, id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    return {"ok": True, "data": _mood_row_to_dict(row) if row else None}
+
+
+@app.get("/mood/week", dependencies=[Depends(verify_brain_token)])
+def mood_week(
+    days: int = Query(7, ge=1, le=30),
+    conn: sqlite3.Connection = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> Dict[str, Any]:
+    tz = ZoneInfo(settings.timezone)
+    now_tz = datetime.now(tz)
+    start_date = (now_tz.date() - timedelta(days=days - 1)).isoformat()
+    rows = conn.execute(
+        """
+        SELECT id, ts_utc, local_date, slot, energy_level, mood_score, mood_text, did_thing, waste_spend, created_at
+        FROM mood_checkins
+        WHERE local_date >= ?
+        ORDER BY local_date ASC, ts_utc ASC, id ASC
+        """,
+        (start_date,),
+    ).fetchall()
+    aggregates_row = conn.execute(
+        """
+        SELECT COUNT(*) AS count,
+               AVG(mood_score) AS avg_mood_score,
+               AVG(energy_level) AS avg_energy_level,
+               SUM(waste_spend) AS waste_spend_count
+        FROM mood_checkins
+        WHERE local_date >= ?
+        """,
+        (start_date,),
+    ).fetchone()
+    aggregates = {
+        "count": int(aggregates_row["count"] or 0),
+        "avg_mood_score": float(aggregates_row["avg_mood_score"])
+        if aggregates_row["avg_mood_score"] is not None
+        else None,
+        "avg_energy_level": float(aggregates_row["avg_energy_level"])
+        if aggregates_row["avg_energy_level"] is not None
+        else None,
+        "waste_spend_count": int(aggregates_row["waste_spend_count"] or 0),
+    }
+    return {"items": [_mood_row_to_dict(row) for row in rows], "aggregates": aggregates}
 
 
 @app.post("/ingest", dependencies=[Depends(verify_brain_token)])
