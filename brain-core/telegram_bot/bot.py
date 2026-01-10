@@ -728,7 +728,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     _log_command("start", update, context.args)
     await update.message.reply_text(
-        "Ciao! Sono il tuo Brain bot. Usa /spesa <importo> <nota>, /categoria <nome>, /oggi, /mese [numero_mese], /mood, /mood_last, /mood_week."
+        "Ciao! Sono il tuo Brain bot.\n"
+        "• /spesa <importo> <nota> aggiunge una spesa\n"
+        "• /categoria <nome> imposta la categoria di default\n"
+        "• /oggi riepilogo spese di oggi\n"
+        "• /mese [numero_mese] riepilogo del mese\n"
+        "• /mood avvia un check-in\n"
+        "• /mood_last ultimo check-in\n"
+        "• /mood_week riepilogo ultimi 7 giorni"
     )
 
 
@@ -737,7 +744,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     _log_command("help", update, context.args)
     await update.message.reply_text(
-        "Ciao! Sono il tuo Brain bot. Usa /spesa <importo> <nota>, /categoria <nome>, /oggi, /mese [numero_mese], /mood, /mood_last, /mood_week."
+        "Comandi disponibili:\n"
+        "• /spesa <importo> <nota> aggiunge una spesa\n"
+        "• /categoria <nome> imposta la categoria di default\n"
+        "• /oggi riepilogo spese di oggi\n"
+        "• /mese [numero_mese] riepilogo del mese\n"
+        "• /mood avvia un check-in\n"
+        "• /mood_last ultimo check-in\n"
+        "• /mood_week riepilogo ultimi 7 giorni"
     )
 
 
