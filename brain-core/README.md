@@ -126,6 +126,16 @@ If numeric input is invalid, the bot replies with one line and re-sends the keyb
 3) Use Telegram `/spesa 10 caffè`
 4) `curl -H "X-BRAIN-TOKEN: $BRAIN_SHARED_TOKEN" http://localhost:8000/finance/summary`
 
+## Compile check
+Run a quick syntax check for the API modules:
+- `make py-compile`
+- or `./scripts/py_compile_check.sh`
+
+## Tests
+Install dev deps and run pytest:
+- `pip install -r requirements-dev.txt`
+- `pytest -q`
+
 ## Troubleshooting
 - No mood check-ins in DB: finish the flow; check bot logs for outbox queue.
 - To query the DB inside the container:

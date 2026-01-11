@@ -1,6 +1,6 @@
 COMPOSE ?= docker-compose
 
-.PHONY: up down logs rebuild ps shell-api shell-bot
+.PHONY: up down logs rebuild ps shell-api shell-bot py-compile
 
 up:
 	$(COMPOSE) up -d
@@ -23,3 +23,6 @@ shell-api:
 
 shell-bot:
 	docker exec -it brain-telegram-bot bash
+
+py-compile:
+	./scripts/py_compile_check.sh
