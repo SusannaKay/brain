@@ -6,3 +6,11 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 .venv/
+
+# Brain runtime DB
+brain_api/data/*.db
+brain_api/data/*.db-journal
+brain_api/data/*.db-wal
+brain_api/data/*.db-shm
+brain_api/data/*.sqlite*
+brain_api/data/*.sqlite3
