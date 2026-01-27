@@ -5,6 +5,12 @@ from typing import Awaitable, Callable, Dict, List, Optional
 from telegram import ReplyKeyboardRemove, Update
 from telegram.ext import ContextTypes
 
+import config
+from vision import callbacks as vision_callbacks
+from vision import dao as vision_dao
+from vision import pipeline as vision_pipeline
+from vision import ui as vision_ui
+
 
 @dataclass
 class _HandlerCtx:
@@ -108,6 +114,130 @@ async def mood_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await client.post_mood_checkin(response.completed_payload)
 
 
+async def vision_media_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    ctx = _require_ctx()
+    if await ctx.guard_rate_limit(update):
+        return
+    if not update.message:
+        return
+    chat = update.effective_chat
+    if not chat:
+        return
+
+    media_type = None
+    media_mime = None
+    file_bytes = None
+
+    if update.message.photo:
+        photo = update.message.photo[-1]
+        file = await context.bot.get_file(photo.file_id)
+        file_bytes = await file.download_as_bytearray()
+        media_type = "photo"
+        media_mime = "image/jpeg"
+    elif update.message.document:
+        document = update.message.document
+        file = await context.bot.get_file(document.file_id)
+        file_bytes = await file.download_as_bytearray()
+        media_type = "document"
+        media_mime = document.mime_type
+
+    if file_bytes is None or media_type is None:
+        return
+
+    ctx.log_command("vision_media", update, None)
+    signal_ids = vision_pipeline.process_telegram_media(
+        chat_id=chat.id,
+        message_id=update.message.message_id,
+        media_bytes_or_path=file_bytes,
+        media_type=media_type,
+        media_mime=media_mime,
+        db_path=config.BRAIN_DB_PATH,
+    )
+    for signal_id in signal_ids:
+        signal = vision_dao.get_signal(signal_id, db_path=config.BRAIN_DB_PATH)
+        if not signal:
+            continue
+        if signal["signal_type"] == "event_candidate.v1":
+            text, keyboard = vision_ui.render_event_proposal(signal)
+        else:
+            text, keyboard = vision_ui.render_place_proposal(signal)
+        await update.message.reply_text(text, reply_markup=keyboard)
+
+
+async def vision_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query:
+        return
+    data = vision_callbacks.parse_callback_data(query.data)
+    if not data:
+        return
+    await query.answer()
+
+    chat_id = query.message.chat_id if query.message else (update.effective_chat.id if update.effective_chat else 0)
+    if data.action == "A":
+        vision_dao.update_signal_status(data.signal_id, "APPROVED", db_path=config.BRAIN_DB_PATH)
+        vision_dao.update_signal_status(data.signal_id, "EXECUTED", db_path=config.BRAIN_DB_PATH)
+        await query.message.reply_text("✅ Evento confermato.")
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+    if data.action == "R":
+        vision_dao.update_signal_status(data.signal_id, "REJECTED", db_path=config.BRAIN_DB_PATH)
+        await query.message.reply_text("❌ Segnale ignorato.")
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+    if data.action == "M":
+        vision_dao.upsert_pending_edit(
+            chat_id=str(chat_id),
+            signal_id=data.signal_id,
+            field=data.field or "",
+            db_path=config.BRAIN_DB_PATH,
+        )
+        if data.field == "time":
+            prompt = "Ok! Inviami il nuovo orario (HH:MM)."
+        elif data.field == "title":
+            prompt = "Ok! Inviami il nuovo titolo."
+        else:
+            prompt = "Ok! Inviami il nuovo luogo."
+        await query.message.reply_text(prompt)
+        return
+
+
+async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    chat = update.effective_chat
+    if not chat:
+        return
+
+    pending = vision_dao.get_pending_edit(str(chat.id), db_path=config.BRAIN_DB_PATH)
+    if pending:
+        field = pending["field"]
+        signal_id = int(pending["signal_id"])
+        user_text = update.message.text or ""
+        try:
+            vision_dao.update_signal_payload_field(
+                signal_id,
+                field,
+                user_text.strip(),
+                db_path=config.BRAIN_DB_PATH,
+            )
+        except ValueError:
+            if field == "time":
+                await update.message.reply_text("Formato non valido. Usa HH:MM.")
+            else:
+                await update.message.reply_text("Valore non valido. Riprova.")
+            return
+        vision_dao.clear_pending_edit(str(chat.id), db_path=config.BRAIN_DB_PATH)
+        signal = vision_dao.get_signal(signal_id, db_path=config.BRAIN_DB_PATH)
+        if signal:
+            if signal["signal_type"] == "event_candidate.v1":
+                text, keyboard = vision_ui.render_event_proposal(signal)
+            else:
+                text, keyboard = vision_ui.render_place_proposal(signal)
+            await update.message.reply_text(text, reply_markup=keyboard)
+        return
+
+    await mood_message(update, context)
 async def mood_last_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ctx = _require_ctx()
     if await ctx.guard_rate_limit(update):

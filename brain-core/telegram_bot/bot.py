@@ -13,6 +13,7 @@ import config
 import handlers
 import mood_flow
 import scheduler
+from vision import db as vision_db
 from bot_helpers import _build_continue_keyboard
 from formatters import (
     _filter_month,
@@ -210,6 +211,7 @@ def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(_post_init).build()
     client = brain_client.BrainClient(BRAIN_URL, BRAIN_TOKEN, BRAIN_BOT_DB_PATH)
     application.bot_data["brain_client"] = client
+    vision_db.init_vision_db(config.BRAIN_DB_PATH)
 
     handlers.bind_ctx(
         guard_rate_limit=_guard_rate_limit,
@@ -247,7 +249,9 @@ def main() -> None:
     application.add_handler(CommandHandler("skip", handlers.skip_command))
     application.add_handler(CallbackQueryHandler(handlers.mood_continue_callback, pattern="^mood_continue$"))
     application.add_handler(CallbackQueryHandler(handlers.mood_cancel_callback, pattern="^mood_cancel$"))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.mood_message))
+    application.add_handler(CallbackQueryHandler(handlers.vision_callback, pattern="^V1\\|"))
+    application.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, handlers.vision_media_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.text_message))
 
     application.run_polling()
 

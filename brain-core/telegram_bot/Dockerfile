@@ -17,5 +17,6 @@ COPY formatters.py /app/formatters.py
 COPY scheduler.py /app/scheduler.py
 COPY handlers.py /app/handlers.py
 COPY bot_helpers.py /app/bot_helpers.py
+COPY vision /app/vision
 
 CMD ["python", "/app/bot.py"]

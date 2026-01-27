@@ -10,6 +10,7 @@ BRAIN_URL = os.getenv("BRAIN_URL", "http://brain-api:8000")
 BRAIN_TOKEN = os.getenv("BRAIN_SHARED_TOKEN", "")
 BRAIN_TELEGRAM_KEY = os.getenv("BRAIN_TELEGRAM_KEY") or BRAIN_TOKEN
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+BRAIN_DB_PATH = os.getenv("BRAIN_DB_PATH", "/app/data/brain.db")
 RATE_LIMIT_SECONDS = float(os.getenv("BRAIN_BOT_RATE_LIMIT_SECONDS", "1.0"))
 DIGEST_ENABLED = os.getenv("DIGEST_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
 DIGEST_TIME_STR = os.getenv("DIGEST_TIME", "08:00")
