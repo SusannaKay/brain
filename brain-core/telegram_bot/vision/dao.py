@@ -3,7 +3,6 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from .db import get_connection
 
 
 def _utcnow_iso() -> str:
@@ -26,7 +25,9 @@ def create_vision_job(
 ) -> int:
     owned_conn = conn is None
     if owned_conn:
-        conn = next(get_connection(db_path))
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
     assert conn is not None
     try:
         conn.execute(
@@ -74,7 +75,9 @@ def get_job_by_message(
 ) -> Optional[sqlite3.Row]:
     owned_conn = conn is None
     if owned_conn:
-        conn = next(get_connection(db_path))
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
     assert conn is not None
     try:
         row = conn.execute(
@@ -101,7 +104,9 @@ def update_vision_job_status(
 ) -> None:
     owned_conn = conn is None
     if owned_conn:
-        conn = next(get_connection(db_path))
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
     assert conn is not None
     try:
         conn.execute(
@@ -132,7 +137,9 @@ def insert_extraction(
 ) -> int:
     owned_conn = conn is None
     if owned_conn:
-        conn = next(get_connection(db_path))
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
     assert conn is not None
     created_at = created_at or _utcnow_iso()
     try:
@@ -174,7 +181,9 @@ def insert_signal(
 ) -> int:
     owned_conn = conn is None
     if owned_conn:
-        conn = next(get_connection(db_path))
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
     assert conn is not None
     created_at = created_at or _utcnow_iso()
     try:
@@ -211,7 +220,9 @@ def list_signal_ids_for_job(
 ) -> List[int]:
     owned_conn = conn is None
     if owned_conn:
-        conn = next(get_connection(db_path))
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
     assert conn is not None
     try:
         rows = conn.execute(
@@ -232,7 +243,9 @@ def get_signal(
 ) -> Optional[sqlite3.Row]:
     owned_conn = conn is None
     if owned_conn:
-        conn = next(get_connection(db_path))
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
     assert conn is not None
     try:
         row = conn.execute(
@@ -255,7 +268,9 @@ def update_signal_status(
 ) -> None:
     owned_conn = conn is None
     if owned_conn:
-        conn = next(get_connection(db_path))
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
     assert conn is not None
     updated_at = _utcnow_iso()
     try:
@@ -283,7 +298,9 @@ def update_signal_payload_field(
 ) -> Dict[str, Any]:
     owned_conn = conn is None
     if owned_conn:
-        conn = next(get_connection(db_path))
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
     assert conn is not None
     try:
         row = conn.execute(
@@ -321,7 +338,9 @@ def upsert_pending_edit(
 ) -> None:
     owned_conn = conn is None
     if owned_conn:
-        conn = next(get_connection(db_path))
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
     assert conn is not None
     created_at = created_at or _utcnow_iso()
     try:
