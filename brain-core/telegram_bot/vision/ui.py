@@ -4,6 +4,8 @@ from typing import Tuple
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from .callbacks import build_callback_data
+
 
 def render_event_proposal(signal_row) -> Tuple[str, InlineKeyboardMarkup]:
     payload = json.loads(signal_row["payload_json"]) if signal_row["payload_json"] else {}
@@ -25,13 +27,13 @@ def render_event_proposal(signal_row) -> Tuple[str, InlineKeyboardMarkup]:
     signal_id = signal_row["id"]
     keyboard = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("✅ Crea", callback_data=f"V1|A|{signal_id}")],
+            [InlineKeyboardButton("✅ Crea", callback_data=build_callback_data("A", signal_id))],
             [
-                InlineKeyboardButton("✏️ Modifica orario", callback_data=f"V1|M|{signal_id}|time"),
-                InlineKeyboardButton("✏️ Modifica titolo", callback_data=f"V1|M|{signal_id}|title"),
+                InlineKeyboardButton("✏️ Modifica orario", callback_data=build_callback_data("M", signal_id, "time")),
+                InlineKeyboardButton("✏️ Modifica titolo", callback_data=build_callback_data("M", signal_id, "title")),
             ],
-            [InlineKeyboardButton("✏️ Modifica luogo", callback_data=f"V1|M|{signal_id}|location")],
-            [InlineKeyboardButton("❌ Ignora", callback_data=f"V1|R|{signal_id}")],
+            [InlineKeyboardButton("✏️ Modifica luogo", callback_data=build_callback_data("M", signal_id, "location"))],
+            [InlineKeyboardButton("❌ Ignora", callback_data=build_callback_data("R", signal_id))],
         ]
     )
     return text, keyboard
@@ -55,8 +57,8 @@ def render_place_proposal(signal_row) -> Tuple[str, InlineKeyboardMarkup]:
     signal_id = signal_row["id"]
     keyboard = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("✅ Salva", callback_data=f"V1|A|{signal_id}")],
-            [InlineKeyboardButton("❌ Ignora", callback_data=f"V1|R|{signal_id}")],
+            [InlineKeyboardButton("✅ Salva", callback_data=build_callback_data("A", signal_id))],
+            [InlineKeyboardButton("❌ Ignora", callback_data=build_callback_data("R", signal_id))],
         ]
     )
     return text, keyboard

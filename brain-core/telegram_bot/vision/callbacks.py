@@ -9,6 +9,20 @@ class CallbackData:
     field: Optional[str] = None
 
 
+def build_callback_data(action: str, signal_id: int, field: Optional[str] = None) -> str:
+    if action not in {"A", "R", "M"}:
+        raise ValueError("Invalid action")
+    if action == "M":
+        if field not in {"time", "title", "location"}:
+            raise ValueError("Invalid field")
+        data = f"V1|{action}|{signal_id}|{field}"
+    else:
+        data = f"V1|{action}|{signal_id}"
+    if len(data.encode("utf-8")) > 64:
+        raise ValueError("Callback data too long")
+    return data
+
+
 def parse_callback_data(data: str) -> Optional[CallbackData]:
     if not data:
         return None

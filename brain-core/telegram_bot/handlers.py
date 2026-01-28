@@ -170,6 +170,7 @@ async def vision_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     data = vision_callbacks.parse_callback_data(query.data)
     if not data:
+        await query.answer("Comando non valido.")
         return
     await query.answer()
 
@@ -186,12 +187,15 @@ async def vision_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_reply_markup(reply_markup=None)
         return
     if data.action == "M":
+        existing = vision_dao.get_pending_edit(str(chat_id), db_path=config.BRAIN_DB_PATH)
         vision_dao.upsert_pending_edit(
             chat_id=str(chat_id),
             signal_id=data.signal_id,
             field=data.field or "",
             db_path=config.BRAIN_DB_PATH,
         )
+        if existing:
+            await query.message.reply_text("Sostituisco la modifica precedente.")
         if data.field == "time":
             prompt = "Ok! Inviami il nuovo orario (HH:MM)."
         elif data.field == "title":

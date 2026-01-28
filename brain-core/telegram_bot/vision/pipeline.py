@@ -3,7 +3,7 @@ import os
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Iterable, List, Union
+from typing import Iterable, List, Optional, Union
 from zoneinfo import ZoneInfo
 
 from . import dao
@@ -14,13 +14,15 @@ def process_telegram_media(
     message_id: int,
     media_bytes_or_path: Union[bytes, bytearray, memoryview, str, os.PathLike],
     media_type: str,
-    media_mime: str | None,
+    media_mime: Optional[str],
     *,
     db_path: str,
+    temp_dir: Optional[Union[str, os.PathLike]] = None,
 ) -> List[int]:
     trace_id = uuid.uuid4().hex
-    temp_path = Path("/tmp") / f"vision_{trace_id}"
-    job_id: int | None = None
+    base_dir = Path(temp_dir) if temp_dir else Path("/tmp")
+    temp_path = base_dir / f"vision_{trace_id}"
+    job_id: Optional[int] = None
 
     try:
         _write_temp_file(temp_path, media_bytes_or_path)
